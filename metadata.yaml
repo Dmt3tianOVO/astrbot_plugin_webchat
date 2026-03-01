@@ -1,7 +1,7 @@
 name: astrbot_plugin_webchat
 display_name: WebChat API
 desc: Expose /api/webchat endpoint for web-based chat integration.
-version: v1.0.0
-author: Dmt3tian
+version: 1.0.0
+author: Dmt3tianOVO
 repo: https://github.com/Dmt3tianOVO/astrbot_plugin_webchat
 astrbot_version: ">=4.17.0"
