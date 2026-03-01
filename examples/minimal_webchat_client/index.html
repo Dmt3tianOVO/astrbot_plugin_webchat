@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Minimal WebChat Client</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 720px;
+        margin: 24px auto;
+        padding: 0 12px;
+      }
+      textarea,
+      input,
+      button {
+        width: 100%;
+        margin-top: 8px;
+        padding: 10px;
+        box-sizing: border-box;
+      }
+      pre {
+        background: #f4f4f4;
+        padding: 12px;
+        overflow-x: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Minimal WebChat Client</h1>
+    <p>
+      This page sends requests to your AstrBot WebChat API plugin.
+    </p>
+
+    <label for="apiBase">API Base URL</label>
+    <input id="apiBase" value="http://127.0.0.1:6186" />
+
+    <label for="endpointPath">Endpoint Path</label>
+    <input id="endpointPath" value="/api/webchat" />
+
+    <label for="sessionId">Session ID</label>
+    <input id="sessionId" value="demo-session" />
+
+    <label for="username">Username</label>
+    <input id="username" value="LocalUser" />
+
+    <label for="message">Message</label>
+    <textarea id="message" rows="4">你好，小智！</textarea>
+
+    <label for="userId">User ID (optional)</label>
+    <input id="userId" value="" />
+
+    <button id="sendButton">Send</button>
+
+    <h2>Response</h2>
+    <pre id="result">(waiting)</pre>
+
+    <script>
+      const sendButton = document.getElementById("sendButton");
+      const resultEl = document.getElementById("result");
+
+      sendButton.addEventListener("click", async () => {
+        const apiBase = document.getElementById("apiBase").value.trim();
+        const endpointPath = document.getElementById("endpointPath").value.trim();
+        const sessionId = document.getElementById("sessionId").value.trim();
+        const username = document.getElementById("username").value.trim();
+        const userId = document.getElementById("userId").value.trim();
+        const message = document.getElementById("message").value.trim();
+
+        if (!apiBase || !endpointPath || !message) {
+          resultEl.textContent = "Please provide API Base URL, endpoint path, and message.";
+          return;
+        }
+
+        resultEl.textContent = "Sending...";
+
+        try {
+          const normalizedPath = endpointPath.startsWith("/")
+            ? endpointPath
+            : `/${endpointPath}`;
+          const requestUrl = `${apiBase}${normalizedPath}`;
+
+          const response = await fetch(requestUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              sessionId,
+              userId,
+              username,
+              message,
+            }),
+          });
+
+          const payload = await response.json();
+          resultEl.textContent = JSON.stringify(
+            {
+              url: requestUrl,
+              status: response.status,
+              payload,
+            },
+            null,
+            2,
+          );
+        } catch (error) {
+          resultEl.textContent = `Request failed: ${String(error)}`;
+        }
+      });
+    </script>
+  </body>
+</html>

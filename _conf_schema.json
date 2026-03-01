@@ -1,0 +1,33 @@
+{
+  "host": {
+    "type": "string",
+    "description": "WebChat API 监听地址",
+    "hint": "用于绑定 WebChat API 服务的主机地址。",
+    "default": "0.0.0.0"
+  },
+  "port": {
+    "type": "int",
+    "description": "WebChat API 端口",
+    "hint": "WebChat API 服务监听端口（1-65535）。",
+    "default": 6186
+  },
+  "endpoint_path": {
+    "type": "string",
+    "description": "WebChat API 路径",
+    "hint": "WebChat API 的 HTTP 路径。",
+    "default": "/api/webchat"
+  },
+  "allowed_origins": {
+    "type": "string",
+    "description": "允许的网页来源（Origin）",
+    "hint": "使用 '*' 允许任意来源，或填写逗号分隔的来源，例如 http://localhost:1234,http://127.0.0.1:1234",
+    "default": "*"
+  },
+  "persona_id": {
+    "type": "string",
+    "description": "WebChat 使用的人格 ID",
+    "hint": "可直接从下拉框选择已在 AstrBot 中配置的人格。",
+    "default": "",
+    "_special": "select_persona"
+  }
+}
