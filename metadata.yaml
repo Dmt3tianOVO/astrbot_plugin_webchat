@@ -1,6 +1,12 @@
 name: astrbot_plugin_webchat
 display_name: WebChat API
-desc: Expose /api/webchat endpoint for web-based chat integration.
+desc: 这是一个轻量的 AstrBot 插件，用于暴露 HTTP 接口：
+
+- `POST /api/webchat`
+- 默认监听：`0.0.0.0:6186`
+- 支持配置 host/port/path，以及浏览器来源（Origin）白名单
+
+该接口会接收网页聊天消息，调用 AstrBot 当前配置的聊天模型提供方，并通过 `conversation_manager` 持久化会话。
 version: 1.0.0
 author: Dmt3tianOVO
 repo: https://github.com/Dmt3tianOVO/astrbot_plugin_webchat
