@@ -1,3 +1,4 @@
+[中文](./README.md) | [English](./README.en.md)
 # astrbot_plugin_webchat
 
 A lightweight AstrBot plugin that exposes an HTTP endpoint:
