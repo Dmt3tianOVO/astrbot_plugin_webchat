@@ -8,6 +8,7 @@ conversation history through `conversation_manager`.
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -16,7 +17,7 @@ from aiohttp import web
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import filter
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
     TextPart,
@@ -34,7 +35,6 @@ class WebChatRequest:
     message: str
 
 
-@register("webchat_api", "CodeHub", "Expose /api/webchat for CodeHub web chat", "1.0.0")
 class WebChatApiPlugin(Star):
     """AstrBot plugin that hosts a lightweight aiohttp WebChat API server."""
 
@@ -57,6 +57,12 @@ class WebChatApiPlugin(Star):
         )
         self._allowed_origins = self._parse_allowed_origins(
             self._config_get("allowed_origins")
+        )
+        self._api_key = str(self._config_get("api_key") or "").strip()
+        self._history_turns = self._parse_positive_int(
+            self._config_get("history_turns"),
+            default=8,
+            max_value=50,
         )
 
     def _config_get(self, key: str, default: Any = None) -> Any:
@@ -102,6 +108,11 @@ class WebChatApiPlugin(Star):
                 "[WebChat] allowed_origins=%s",
                 ", ".join(sorted(self._allowed_origins)),
             )
+            logger.info(
+                "[WebChat] api_key_auth=%s history_turns=%s",
+                "enabled" if self._api_key else "disabled",
+                self._history_turns,
+            )
 
     async def _stop_server(self) -> None:
         """Release aiohttp resources if the server is running."""
@@ -137,10 +148,24 @@ class WebChatApiPlugin(Star):
                 origin=origin,
             )
 
+        if not self._is_request_authorized(request):
+            return self._json_response(
+                {"error": "unauthorized"},
+                status=401,
+                origin=origin,
+            )
+
         logger.info("[WebChat] Request received from: %s", request.remote)
         try:
             payload = await request.json()
+        except json.JSONDecodeError:
+            return self._json_response(
+                {"error": "invalid_json"},
+                status=400,
+                origin=origin,
+            )
         except Exception:
+            logger.exception("[WebChat] Unexpected JSON parse error")
             return self._json_response(
                 {"error": "invalid_json"},
                 status=400,
@@ -192,7 +217,7 @@ class WebChatApiPlugin(Star):
         """Build CORS headers based on current allow-list configuration."""
         headers = {
             "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
         }
 
         if "*" in self._allowed_origins:
@@ -231,6 +256,25 @@ class WebChatApiPlugin(Star):
 
         return origin in self._allowed_origins
 
+    def _extract_api_key(self, request: web.Request) -> str:
+        """Extract API key from `X-API-Key` or `Authorization: Bearer` header."""
+        x_api_key = (request.headers.get("X-API-Key") or "").strip()
+        if x_api_key:
+            return x_api_key
+
+        authorization = (request.headers.get("Authorization") or "").strip()
+        if authorization.lower().startswith("bearer "):
+            return authorization[7:].strip()
+
+        return ""
+
+    def _is_request_authorized(self, request: web.Request) -> bool:
+        """Validate API key when `api_key` is configured."""
+        if not self._api_key:
+            return True
+
+        return self._extract_api_key(request) == self._api_key
+
     def _normalize_endpoint_path(self, raw_path: Any) -> str:
         """Normalize endpoint path and ensure it starts with '/'."""
         path = str(raw_path or "/api/webchat").strip() or "/api/webchat"
@@ -262,6 +306,27 @@ class WebChatApiPlugin(Star):
             return default
 
         return parsed
+
+    def _parse_positive_int(
+        self,
+        raw_value: Any,
+        *,
+        default: int,
+        max_value: int,
+    ) -> int:
+        """Parse positive integer config with upper bound."""
+        if raw_value is None:
+            return default
+
+        try:
+            parsed = int(raw_value)
+        except (TypeError, ValueError):
+            return default
+
+        if parsed < 1:
+            return default
+
+        return min(parsed, max_value)
 
     def _parse_allowed_origins(self, raw_origins: Any) -> set[str]:
         """Parse allow-list from list/tuple or comma-separated string.
@@ -326,6 +391,48 @@ class WebChatApiPlugin(Star):
             logger.warning("[WebChat] persona_id does not exist: %s", persona_id)
             return None, None
 
+    async def _get_recent_history_text(
+        self,
+        unified_origin: str,
+        conversation_id: str,
+    ) -> str:
+        """Build compact recent history text from stored conversation."""
+        if self._history_turns <= 0:
+            return ""
+
+        lines, _ = await self.context.conversation_manager.get_human_readable_context(
+            unified_msg_origin=unified_origin,
+            conversation_id=conversation_id,
+            page=1,
+            page_size=self._history_turns * 2,
+        )
+
+        if not lines:
+            return ""
+
+        # `get_human_readable_context` returns latest-first; reverse to chronological order.
+        ordered = list(reversed(lines))
+        return "\n".join(ordered)
+
+    def _build_prompt(
+        self,
+        *,
+        message: str,
+        persona_system_prompt: str | None,
+        history_text: str,
+    ) -> str:
+        """Build final prompt with persona + history + current user message."""
+        blocks: list[str] = []
+
+        if persona_system_prompt:
+            blocks.append(f"[System Prompt]\n{persona_system_prompt}")
+
+        if history_text:
+            blocks.append(f"[Recent Conversation Context]\n{history_text}")
+
+        blocks.append(f"[Current User Message]\n{message}")
+        return "\n\n".join(blocks)
+
     async def _generate_reply(self, data: WebChatRequest) -> str:
         """Generate reply text and persist conversation history."""
         unified_origin = f"webchat:private:{data.session_id}"
@@ -342,21 +449,22 @@ class WebChatApiPlugin(Star):
             provider_id,
         )
 
-        identity_lock = (
-            'You must always answer as "小智".'
-            "Never claim to be DeepSeek, an AI assistant, an LLM, or a bot."
-            'If asked "who are you", answer exactly: "我是小智".'
+        conv_mgr = self.context.conversation_manager
+        curr_cid = await conv_mgr.get_curr_conversation_id(unified_origin)
+        if not curr_cid:
+            curr_cid = await conv_mgr.new_conversation(
+                unified_origin,
+                platform_id="webchat",
+                title=data.username,
+                persona_id=persona_id,
+            )
+
+        history_text = await self._get_recent_history_text(unified_origin, curr_cid)
+        merged_prompt = self._build_prompt(
+            message=data.message,
+            persona_system_prompt=persona_system_prompt,
+            history_text=history_text,
         )
-        if persona_system_prompt:
-            merged_prompt = (
-                f"{persona_system_prompt}\n\n"
-                f"[Identity Rules]{identity_lock}\n\n"
-                f"User message: {data.message}"
-            )
-        else:
-            merged_prompt = (
-                f"[Identity Rules]{identity_lock}\n\nUser message: {data.message}"
-            )
 
         llm_resp = await self.context.llm_generate(
             chat_provider_id=provider_id,
@@ -367,15 +475,6 @@ class WebChatApiPlugin(Star):
         reply_text = (llm_resp.completion_text or "").strip()
 
         try:
-            conv_mgr = self.context.conversation_manager
-            curr_cid = await conv_mgr.get_curr_conversation_id(unified_origin)
-            if not curr_cid:
-                curr_cid = await conv_mgr.new_conversation(
-                    unified_origin,
-                    platform_id="webchat",
-                    title=data.username,
-                )
-
             await conv_mgr.add_message_pair(
                 cid=curr_cid,
                 user_message=UserMessageSegment(content=[TextPart(text=data.message)]),
@@ -387,3 +486,4 @@ class WebChatApiPlugin(Star):
             logger.exception("[WebChat] Failed to persist conversation")
 
         return reply_text
+

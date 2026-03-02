@@ -21,10 +21,11 @@ Example:
 python -m http.server 1234
 ```
 
-The page lets you set both:
+The page lets you set:
 
 - API base URL (for example `http://127.0.0.1:6186`)
 - endpoint path (for example `/api/webchat`)
+- API key (optional, if plugin `api_key` is configured)
 
 ## Required plugin config
 
@@ -43,7 +44,9 @@ Recommended plugin config example:
   "host": "0.0.0.0",
   "port": 6186,
   "endpoint_path": "/api/webchat",
-  "allowed_origins": "http://localhost:1234"
+  "allowed_origins": "http://localhost:1234",
+  "api_key": "your-strong-key",
+  "history_turns": 8
 }
 ```
 

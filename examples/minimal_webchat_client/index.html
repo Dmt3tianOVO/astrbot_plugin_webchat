@@ -50,6 +50,9 @@
     <label for="userId">User ID (optional)</label>
     <input id="userId" value="" />
 
+    <label for="apiKey">API Key (optional)</label>
+    <input id="apiKey" value="" />
+
     <button id="sendButton">Send</button>
 
     <h2>Response</h2>
@@ -65,6 +68,7 @@
         const sessionId = document.getElementById("sessionId").value.trim();
         const username = document.getElementById("username").value.trim();
         const userId = document.getElementById("userId").value.trim();
+        const apiKey = document.getElementById("apiKey").value.trim();
         const message = document.getElementById("message").value.trim();
 
         if (!apiBase || !endpointPath || !message) {
@@ -80,11 +84,16 @@
             : `/${endpointPath}`;
           const requestUrl = `${apiBase}${normalizedPath}`;
 
+          const headers = {
+            "Content-Type": "application/json",
+          };
+          if (apiKey) {
+            headers["X-API-Key"] = apiKey;
+          }
+
           const response = await fetch(requestUrl, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers,
             body: JSON.stringify({
               sessionId,
               userId,

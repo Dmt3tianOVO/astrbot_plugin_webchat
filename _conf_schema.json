@@ -23,6 +23,18 @@
     "hint": "使用 '*' 允许任意来源，或填写逗号分隔的来源，例如 http://localhost:1234,http://127.0.0.1:1234",
     "default": "*"
   },
+  "api_key": {
+    "type": "string",
+    "description": "API Key（可选）",
+    "hint": "配置后将启用鉴权。请求头支持 X-API-Key 或 Authorization: Bearer <key>。",
+    "default": ""
+  },
+  "history_turns": {
+    "type": "int",
+    "description": "上下文保留轮数",
+    "hint": "每次请求携带最近 N 轮历史上下文，建议 4-12。",
+    "default": 8
+  },
   "persona_id": {
     "type": "string",
     "description": "WebChat 使用的人格 ID",
